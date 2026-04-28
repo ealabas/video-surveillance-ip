@@ -1,0 +1,4 @@
+server/dash_output/*
+!server/dash_output/.gitkeep
+*.m4s
+*.mpd
