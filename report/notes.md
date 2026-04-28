@@ -52,13 +52,24 @@ Client:
 | `-window_size 5` | Keep last 5 segments in manifest |
 | `-extra_window_size 10` | Keep 10 extra segments on disk for rewinding |
 
-### Output Files
+### Output Files of DASH
 - `stream.mpd` - DASH manifest 
 - `init-stream0.m4s` - Initialization segment 
 - `chunk-stream0-XXXXX.m4s` - Other video segments 
 
 ### NGINX Configuration
-- TODO
+- File: server/nginx/conf/nginx.conf on port 9090
+- MIME types for .mpd (application/dash+xml) and .m4s (video/iso.segment)
+- CORS headers (Access-Control-Allow-Origin) to allow browser requests
+- No-cache on .mpd to ensure browser gets fresh manifest
+- CHECK: Absolute paths used?
+
+## 6. Latency Measurements
+| Segment Duration | Measured Latency | Notes |
+| 2 seconds        |                  | TODO  |
+| 4 seconds        |  16.7 seconds    | Tested with dash.js reference player |
+| 6 seconds        |                  | TODO  |
 
 ### Integration Testing
+- FFmpeg capture + NGINX serving + dash.js player (https://reference.dashif.org/dash.js/latest/samples/dash-if-reference-player/index.html) all working together with current configs
 - TODO
