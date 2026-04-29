@@ -2,8 +2,3 @@ server/dash_output/*
 !server/dash_output/.gitkeep
 *.m4s
 *.mpd
-
-server/nginx/*
-!server/nginx/conf/
-server/nginx/conf/*
-!server/nginx/conf/nginx.conf
