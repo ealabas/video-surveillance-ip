@@ -1,0 +1,916 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Live Stream Player</title>
+  <script src="https://cdn.dashjs.org/latest/dash.all.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: Arial, sans-serif;
+      background: #f0f0f0;
+      min-height: 100vh;
+    }
+
+    /* HEADER */
+    .header {
+      background: #fff;
+      border-bottom: 1px solid #ddd;
+      padding: 0 20px;
+      height: 50px;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+    }
+    .header-logo {
+      font-size: 22px;
+      font-weight: bold;
+      color: #333;
+    }
+    .header-logo span { color: #f97316; }
+    .header-time {
+      font-size: 13px;
+      color: #888;
+    }
+
+    /* MAIN */
+    .container {
+      max-width: 1100px;
+      margin: 20px auto;
+      padding: 0 16px;
+      display: grid;
+      grid-template-columns: 1fr 280px;
+      gap: 16px;
+    }
+
+    /* VIDEO CARD */
+    .video-card {
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .video-wrap {
+      position: relative;
+      background: #000;
+      aspect-ratio: 16/9;
+    }
+
+    #vid {
+      width: 100%;
+      height: 100%;
+      display: block;
+      object-fit: contain;
+    }
+
+    .live-pill {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: #f97316;
+      color: #fff;
+      font-size: 11px;
+      font-weight: bold;
+      padding: 3px 8px;
+      border-radius: 3px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      letter-spacing: 1px;
+    }
+    .live-dot {
+      width: 6px; height: 6px;
+      background: #fff;
+      border-radius: 50%;
+      animation: blink 1.2s infinite;
+    }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+    #statusOv {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      z-index: 5; overflow: hidden;
+    }
+    #noiseCanvas {
+      position: absolute; inset: 0;
+      width: 100%; height: 100%;
+      opacity: 0.85;
+      display: block;
+    }
+    .status-content {
+      position: relative; z-index: 2;
+      display: flex; flex-direction: column;
+      align-items: center; gap: 12px;
+      background: rgba(0,0,0,.5);
+      padding: 16px 24px;
+      border-radius: 6px;
+    }
+    .spin {
+      width: 32px; height: 32px;
+      border: 3px solid #555;
+      border-top-color: #3a7dff;
+      border-radius: 50%;
+      animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #statusMsg { color: #aaa; font-size: 13px; }
+
+    /* CONTROLS BAR */
+    .controls-bar {
+      padding: 10px 12px;
+      border-top: 1px solid #eee;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    /* seek */
+    .seek-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .time-lbl {
+      font-size: 12px;
+      color: #666;
+      min-width: 48px;
+      white-space: nowrap;
+      font-family: monospace;
+    }
+    input[type=range]#seekBar {
+      flex: 1;
+      height: 4px;
+      accent-color: #3a7dff;
+      cursor: pointer;
+    }
+
+    /* buttons */
+    .btn-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .btn {
+      padding: 7px 14px;
+      border-radius: 3px;
+      font-size: 13px;
+      font-weight: bold;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: opacity .15s;
+    }
+    .btn:hover { opacity: .85; }
+    .btn:active { opacity: .7; }
+
+    .btn-blue {
+      background: #3a7dff;
+      color: #fff;
+      border-color: #3a7dff;
+    }
+    .btn-red {
+      background: #f97316;
+      color: #fff;
+      border-color: #f97316;
+    }
+    .btn-outline {
+      background: #fff;
+      color: #333;
+      border-color: #ccc;
+    }
+
+    /* rewind group */
+    .rewind-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-left: auto;
+    }
+    .rewind-group label {
+      font-size: 12px;
+      color: #666;
+    }
+    .rewind-group input {
+      width: 80px;
+      padding: 6px 8px;
+      border: 1px solid #ccc;
+      border-radius: 3px;
+      font-size: 12px;
+      font-family: monospace;
+      outline: none;
+    }
+    .rewind-group input:focus { border-color: #f97316; }
+
+    /* seg row */
+    .seg-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .seg-row span {
+      font-size: 12px;
+      color: #666;
+    }
+    .seg-btn {
+      padding: 4px 10px;
+      border: 1px solid #ccc;
+      background: #fff;
+      border-radius: 3px;
+      font-size: 12px;
+      cursor: pointer;
+      color: #333;
+    }
+    .seg-btn.active {
+      background: #f97316;
+      color: #fff;
+      border-color: #f97316;
+    }
+
+    /* thumbnail grid - wraps into rows */
+    .thumb-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      max-height: 116px;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 2px 0;
+      scrollbar-width: thin;
+      scrollbar-color: #ddd transparent;
+    }
+    .thumb-grid::-webkit-scrollbar { width: 3px; }
+    .thumb-grid::-webkit-scrollbar-thumb { background: #ddd; border-radius: 2px; }
+    .thumb {
+      flex: 0 0 auto;
+      width: 72px;
+      height: 50px;
+      cursor: pointer;
+      border: 1px solid #ddd;
+      border-radius: 3px;
+      overflow: hidden;
+      position: relative;
+    }
+    .thumb:hover { border-color: #3a7dff; }
+    .thumb img { width: 72px; height: 50px; display: block; object-fit: cover; }
+    .thumb-t {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      background: rgba(0,0,0,.65);
+      font-size: 8px; color: #fff; text-align: center; padding: 1px;
+      font-family: monospace;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+
+    /* SIDEBAR */
+    .sidebar {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .card {
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 14px;
+    }
+    .card-title {
+      font-size: 12px;
+      font-weight: bold;
+      color: #f97316;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 10px;
+      border-bottom: 2px solid #f97316;
+      padding-bottom: 6px;
+    }
+
+    /* connect */
+    .connect-input {
+      width: 100%;
+      padding: 7px 9px;
+      border: 1px solid #ccc;
+      border-radius: 3px;
+      font-size: 12px;
+      font-family: monospace;
+      outline: none;
+      margin-bottom: 8px;
+    }
+    .connect-input:focus { border-color: #f97316; }
+    .connect-btn {
+      width: 100%;
+      padding: 9px;
+      background: #3a7dff;
+      color: #fff;
+      border: none;
+      border-radius: 3px;
+      font-size: 14px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    .connect-btn:hover { background: #2563eb; }
+
+    .q-row { display: flex; gap: 6px; }
+    .q-btn {
+      flex: 1; padding: 6px 4px;
+      border: 1px solid #ddd; background: #fff;
+      color: #555; font-size: 12px; font-weight: 500;
+      border-radius: 3px; cursor: pointer; transition: all .15s; text-align: center;
+    }
+    .q-btn:hover { border-color: #f97316; color: #f97316; }
+    .q-btn.q-on { border-color: #3a7dff; color: #3a7dff; background: #f0f5ff; font-weight: bold; }
+
+    /* stats */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .stat {
+      background: #f7f7f7;
+      border: 1px solid #eee;
+      border-radius: 3px;
+      padding: 8px;
+      text-align: center;
+    }
+    .stat-val {
+      font-size: 18px;
+      font-weight: bold;
+      color: #333;
+      font-family: monospace;
+    }
+    .stat-key {
+      font-size: 10px;
+      color: #888;
+      text-transform: uppercase;
+      margin-top: 2px;
+    }
+
+    /* latency log */
+    .log-box {
+      background: #f7f7f7;
+      border: 1px solid #eee;
+      border-radius: 3px;
+      padding: 8px;
+      font-family: monospace;
+      font-size: 11px;
+      color: #555;
+      max-height: 100px;
+      overflow-y: auto;
+    }
+    .log-row {
+      display: flex;
+      justify-content: flex-end;
+      padding: 2px 0;
+      border-bottom: 1px solid #eee;
+    }
+    .log-row:last-child { border: none; }
+    .log-val { color: #3a7dff; font-weight: bold; }
+
+    /* motion */
+    .motion-box {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px;
+      background: #f7f7f7;
+      border: 1px solid #eee;
+      border-radius: 3px;
+    }
+    .mot-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: #ccc;
+      flex-shrink: 0;
+    }
+    .mot-dot.on {
+      background: #f97316;
+      box-shadow: 0 0 6px #f97316;
+      animation: blink .6s infinite;
+    }
+    .mot-lbl { font-size: 13px; color: #333; }
+    .sens-row {
+      display: flex; align-items: center; gap: 8px; margin-top: 8px;
+    }
+    .sens-row label { font-size: 11px; color: #666; }
+    #motSens { flex: 1; accent-color: #f97316; }
+
+    /* status bar */
+    .statusbar {
+      background: #fff;
+      border-top: 1px solid #ddd;
+      padding: 6px 20px;
+      display: flex;
+      gap: 20px;
+      font-size: 11px;
+      color: #888;
+      font-family: monospace;
+    }
+    #connLbl { color: #888; }
+    #connLbl.ok { color: #f97316; font-weight: bold; }
+
+    /* toast */
+    #toast {
+      position: fixed; top: 60px; right: 16px;
+      background: #333; color: #fff;
+      font-size: 12px; padding: 8px 14px;
+      border-radius: 4px; z-index: 999;
+      opacity: 0; transform: translateY(-6px);
+      transition: all .2s; pointer-events: none;
+    }
+    #toast.show { opacity: 1; transform: translateY(0); }
+
+    #motCvs, #ssCvs { display: none; }
+
+    @media (max-width: 800px) {
+      .container { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<canvas id="motCvs"></canvas>
+<canvas id="ssCvs"></canvas>
+<div id="toast"></div>
+
+<!-- HEADER -->
+<div class="header">
+</div>
+
+<!-- MAIN -->
+<div class="container">
+
+  <!-- LEFT -->
+  <div>
+    <div class="video-card">
+
+      <div class="video-wrap">
+        <div class="live-pill" id="livePill"><div class="live-dot"></div>LIVE</div>
+        <div id="statusOv">
+          <canvas id="noiseCanvas"></canvas>
+          <div class="status-content">
+            <div class="spin"></div>
+            <div id="statusMsg">Waiting for connection…</div>
+          </div>
+        </div>
+        <video id="vid" autoplay muted playsinline></video>
+      </div>
+
+      <div class="controls-bar">
+
+        <!-- Seek bar -->
+        <div class="seek-row">
+          <span class="time-lbl" id="curLbl">0:00:00</span>
+          <input type="range" id="seekBar" min="0" max="100" value="100" step="0.1" />
+          <span class="time-lbl" style="text-align:right" id="durLbl">LIVE</span>
+        </div>
+
+        <!-- Thumbnails -->
+        <div class="thumb-grid" id="thumbRow"></div>
+
+        <!-- Main buttons -->
+        <div class="btn-row">
+          <button class="btn btn-blue" id="ppBtn" onclick="togglePlay()">⏸ Pause</button>
+          <button class="btn btn-red" onclick="jumpLive()">● Live</button>
+          <button class="btn btn-outline" onclick="takeShot()">Screenshot</button>
+
+          <div class="rewind-group">
+            <label>Rewind:</label>
+            <input type="text" id="rwIn" placeholder="sec or HH:MM:SS" />
+            <button class="btn btn-outline" onclick="doRewind()">Go</button>
+          </div>
+        </div>
+
+        <!-- Segment selector -->
+        <div class="seg-row">
+          <span>Segment size:</span>
+          <button class="seg-btn active" data-s="2" onclick="setSeg(2)">2s</button>
+          <button class="seg-btn" data-s="4" onclick="setSeg(4)">4s</button>
+          <button class="seg-btn" data-s="6" onclick="setSeg(6)">6s</button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+
+    <div class="card">
+      <div class="card-title">Connect</div>
+      <input class="connect-input" type="text" id="mpdUrl" placeholder="http://server/dash/stream.mpd" />
+      <button class="connect-btn" onclick="loadStream()">Connect</button>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Stream Stats</div>
+      <div class="stats-grid">
+        <div class="stat"><div class="stat-val" id="sBr">—</div><div class="stat-key">kbps</div></div>
+        <div class="stat"><div class="stat-val" id="sLat">—</div><div class="stat-key">latency ms</div></div>
+        <div class="stat"><div class="stat-val" id="sFps">—</div><div class="stat-key">fps</div></div>
+        <div class="stat"><div class="stat-val" id="sDr">0</div><div class="stat-key">dropped</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Adaptive Quality</div>
+      <div class="q-row">
+        <button class="q-btn q-on" data-q="-1" onclick="setQ(-1)">Auto</button>
+        <button class="q-btn" data-q="0" onclick="setQ(0)">Low</button>
+        <button class="q-btn" data-q="1" onclick="setQ(1)">Med</button>
+        <button class="q-btn" data-q="2" onclick="setQ(2)">High</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Latency Log</div>
+      <div class="log-box" id="latLog">
+        <div class="log-row" style="color:#aaa">— connect to start —</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Motion Detection</div>
+      <div class="motion-box">
+        <div class="mot-dot" id="motDot"></div>
+        <span class="mot-lbl" id="motLbl">No Motion</span>
+      </div>
+      <div class="sens-row">
+        <label>Sensitivity</label>
+        <input type="range" id="motSens" min="5" max="50" value="20" />
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- STATUS BAR -->
+<div class="statusbar">
+  <span id="connLbl">● Disconnected</span>
+  <span id="segLbl">Segment: 2s</span>
+  <span id="latLbl">Latency: — ms</span>
+</div>
+
+<script>
+const CFG = { segDur:2, thumbInterval:15, motionRate:250, maxLog:20, ssFormat:'image/jpeg', ssQ:.95 };
+
+let player=null, dragging=false, motPrev=null;
+let motTmr=null, thumbTmr=null, statsLp=null;
+let latE=[], thumbs=[];
+let absStart=null;
+let noiseRunning=false;
+
+/* url param */
+(()=>{ const p=new URLSearchParams(location.search).get('mpd'); if(p) document.getElementById('mpdUrl').value=p; })();
+
+/* ── NOISE ── */
+function startNoise(){
+  if(noiseRunning)return;
+  noiseRunning=true;
+  const c=document.getElementById('noiseCanvas');
+  const ctx=c.getContext('2d');
+  function resize(){ c.width=c.offsetWidth||640; c.height=c.offsetHeight||360; }
+  resize();
+  function draw(){
+    if(!noiseRunning)return;
+    resize();
+    const w=c.width,h=c.height;
+    const img=ctx.createImageData(w,h);
+    const d=img.data;
+    for(let i=0;i<d.length;i+=4){
+      const v=Math.random()*255|0;
+      d[i]=d[i+1]=d[i+2]=v; d[i+3]=255;
+    }
+    ctx.putImageData(img,0,0);
+    requestAnimationFrame(draw);
+  }
+  draw();
+}
+function stopNoise(){ noiseRunning=false; }
+startNoise();
+
+/* ── LOAD ── */
+function loadStream(){
+  const url=document.getElementById('mpdUrl').value.trim();
+  if(!url){toast('Enter MPD URL');return;}
+  setStatus('Connecting…',true);
+  if(player){player.destroy();player=null;}
+  absStart=null;
+  const vid=document.getElementById('vid');
+  player=dashjs.MediaPlayer().create();
+  player.initialize(vid,url,true);
+  try{player.updateSettings({streaming:{abr:{autoSwitchBitrate:{video:true}}}});}catch(e){}
+
+  player.on(dashjs.MediaPlayer.events.STREAM_INITIALIZED,()=>{
+    hideStatus(); startStats(); startMotion(); startThumbs(); connOk(true); logLat('Connected','—');
+  });
+  player.on(dashjs.MediaPlayer.events.ERROR,()=>{
+    setStatus('Error — check URL',false); connOk(false);
+  });
+  player.on(dashjs.MediaPlayer.events.FRAGMENT_LOADING_COMPLETED,e=>{
+    if(!e?.request||e.request.type!=='MediaSegment')return;
+    const ms=Math.round((e.request.requestEndDate-e.request.requestStartDate)*1000);
+    if(ms>0&&ms<30000){
+      document.getElementById('sLat').textContent=ms;
+      document.getElementById('latLbl').textContent='Latency: '+ms+' ms';
+      logLat(CFG.segDur+'s',ms+'ms');
+    }
+  });
+}
+
+/* ── CONTROLS ── */
+function togglePlay(){
+  const vid=document.getElementById('vid'),btn=document.getElementById('ppBtn');
+  if(vid.paused){
+    // disable live catchup so it doesn't snap back
+    try{ player.updateSettings({streaming:{liveCatchup:{enabled:false}}}); }catch(e){}
+    vid.play();
+    btn.textContent='⏸ Pause';
+  } else {
+    vid.pause();
+    btn.textContent='▶ Play';
+  }
+}
+
+function jumpLive(){
+  if(!player)return;
+  // re-enable catchup when going back to live
+  try{ player.updateSettings({streaming:{liveCatchup:{enabled:true}}}); }catch(e){}
+  const vid=document.getElementById('vid');
+  if(vid.seekable&&vid.seekable.length>0)
+    vid.currentTime=vid.seekable.end(vid.seekable.length-1);
+  vid.play();
+  document.getElementById('ppBtn').textContent='⏸ Pause';
+  document.getElementById('livePill').style.opacity='1';
+}
+
+function doRewind(){
+  if(!player)return;
+  const raw=document.getElementById('rwIn').value.trim();
+  const s=parseT(raw);
+  if(s===null){toast('Format: seconds or HH:MM:SS');return;}
+  const vid=document.getElementById('vid');
+  if(!vid.seekable||vid.seekable.length===0){toast('Stream not ready');return;}
+  const start=vid.seekable.start(0);
+  const end=vid.seekable.end(vid.seekable.length-1);
+  const cur=vid.currentTime;
+  const seekTo=cur-s;
+  if(seekTo<start){toast('Too far back — buffer: ~'+Math.round(end-start)+'s');return;}
+  try{ player.updateSettings({streaming:{liveCatchup:{enabled:false}}}); }catch(e){}
+  vid.pause();
+  vid.currentTime=seekTo;
+  setTimeout(()=>{ vid.play(); document.getElementById('ppBtn').textContent='⏸ Pause'; },400);
+  document.getElementById('livePill').style.opacity='0.4';
+  toast('Playing from −'+s+'s');
+}
+
+function parseT(str){
+  if(!str)return null;
+  if(/^\d+(\.\d+)?$/.test(str))return+str;
+  const p=str.split(':').map(Number);
+  if(p.some(isNaN))return null;
+  if(p.length===3)return p[0]*3600+p[1]*60+p[2];
+  if(p.length===2)return p[0]*60+p[1];
+  return null;
+}
+
+/* seek bar */
+const sb=document.getElementById('seekBar');
+sb.addEventListener('mousedown',()=>dragging=true);
+sb.addEventListener('touchstart',()=>dragging=true);
+sb.addEventListener('mouseup',commitSeek);
+sb.addEventListener('touchend',commitSeek);
+function commitSeek(){
+  dragging=false;
+  if(!player)return;
+  const vid=document.getElementById('vid');
+  if(!vid.seekable||vid.seekable.length===0)return;
+  const start=vid.seekable.start(0);
+  const end=vid.seekable.end(vid.seekable.length-1);
+  const t=start+(sb.value/100)*(end-start);
+  const atLive=end-t<10;
+  try{ player.updateSettings({streaming:{liveCatchup:{enabled:atLive}}}); }catch(e){}
+  vid.pause();
+  vid.currentTime=t;
+  setTimeout(()=>{ vid.play(); document.getElementById('ppBtn').textContent='⏸ Pause'; },400);
+  document.getElementById('livePill').style.opacity=atLive?'1':'0.4';
+}
+
+/* stats */
+function startStats(){
+  if(statsLp)clearInterval(statsLp);
+  absStart=null;
+  statsLp=setInterval(()=>{
+    if(!player)return;
+    const vid=document.getElementById('vid');
+    if(!vid.seekable||vid.seekable.length===0)return;
+    const seekStart=vid.seekable.start(0);
+    const seekEnd=vid.seekable.end(vid.seekable.length-1);
+    if(absStart===null) absStart=seekStart;
+    const cur=vid.currentTime;
+    const range=seekEnd-seekStart;
+    if(range<=0)return;
+    if(!dragging){
+      const pct=Math.max(0,Math.min(100,((cur-seekStart)/range)*100));
+      sb.value=pct;
+      const elapsed=Math.max(0,cur-absStart);
+      document.getElementById('curLbl').textContent=fmtT(elapsed);
+      const rem=seekEnd-cur;
+      const atLive=rem<10;
+      document.getElementById('durLbl').textContent=atLive?'LIVE':('−'+fmtT(rem));
+      if(atLive) sb.value=100;
+      document.getElementById('livePill').style.opacity=atLive?'1':'0.4';
+    }
+    try{
+      const thr=player.getAverageThroughput('video');
+      if(thr) document.getElementById('sBr').textContent=Math.round(thr/1000);
+      if(vid.getVideoPlaybackQuality){
+        const q=vid.getVideoPlaybackQuality();
+        document.getElementById('sDr').textContent=q.droppedVideoFrames||0;
+      }
+    }catch(e){}
+  },400);
+}
+
+/* screenshot */
+function takeShot(){
+  const vid=document.getElementById('vid'),c=document.getElementById('ssCvs');
+  c.width=vid.videoWidth||1280; c.height=vid.videoHeight||720;
+  const ctx=c.getContext('2d');
+  ctx.drawImage(vid,0,0,c.width,c.height);
+  const ts=new Date().toISOString().replace('T',' ').slice(0,19);
+  ctx.fillStyle='rgba(0,0,0,.5)'; ctx.fillRect(6,c.height-22,190,18);
+  ctx.fillStyle='#fff'; ctx.font='11px monospace';
+  ctx.fillText('LiveStream '+ts,10,c.height-8);
+  c.toBlob(b=>{
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(b); a.download='shot_'+Date.now()+'.jpg'; a.click();
+    URL.revokeObjectURL(a.href);
+  },CFG.ssFormat,CFG.ssQ);
+  toast('Screenshot saved!');
+}
+
+/* thumbnails */
+function startThumbs(){
+  if(thumbTmr)clearInterval(thumbTmr);
+  thumbTmr=setInterval(()=>captureThumb(false), CFG.thumbInterval*1000);
+}
+
+function captureThumb(isMotion){
+  const vid=document.getElementById('vid');
+  if(!vid.videoWidth)return;
+  const c=document.createElement('canvas'); c.width=144; c.height=80;
+  c.getContext('2d').drawImage(vid,0,0,144,80);
+  const absTime=vid.currentTime;
+  const elapsed=absStart!==null?Math.max(0,absTime-absStart):0;
+  thumbs.push({elapsed, absTime, src:c.toDataURL('image/jpeg',.7), motion:isMotion});
+  if(thumbs.length>40)thumbs.shift();
+  renderThumbs();
+}
+
+function renderThumbs(){
+  const row=document.getElementById('thumbRow'); row.innerHTML='';
+  thumbs.forEach(t=>{
+    const d=document.createElement('div'); d.className='thumb';
+    if(t.motion) d.style.borderColor='#3a7dff';
+    d.title=(t.motion?'⚠ Motion — ':'')+'Jump to '+fmtT(t.elapsed);
+    d.onclick=function(){
+      if(!player)return;
+      const vid=document.getElementById('vid');
+      if(!vid.seekable||vid.seekable.length===0){toast('Stream not ready');return;}
+      const seekStart=vid.seekable.start(0);
+      const seekEnd=vid.seekable.end(vid.seekable.length-1);
+      if(t.absTime<seekStart){toast('No longer in buffer');return;}
+      const target=Math.min(t.absTime, seekEnd-1);
+      try{ player.updateSettings({streaming:{liveCatchup:{enabled:false}}}); }catch(e){}
+      vid.pause();
+      vid.currentTime=target;
+      setTimeout(()=>{ vid.play(); document.getElementById('ppBtn').textContent='⏸ Pause'; },400);
+      document.getElementById('livePill').style.opacity='0.4';
+      toast('Playing from '+fmtT(t.elapsed));
+    };
+    const img=document.createElement('img'); img.src=t.src;
+    const lbl=document.createElement('div'); lbl.className='thumb-t';
+    lbl.textContent=(t.motion?'⚠ ':'')+fmtT(t.elapsed);
+    if(t.motion) lbl.style.background='rgba(58,125,255,.8)';
+    d.appendChild(img); d.appendChild(lbl); row.appendChild(d);
+  });
+  row.scrollTop=row.scrollHeight;
+}
+
+/* motion */
+let motionCooldown=false;
+let motionResetTimer=null;
+function startMotion(){
+  if(motTmr)clearInterval(motTmr);
+  motTmr=setInterval(()=>{
+    const vid=document.getElementById('vid');
+    if(!vid.videoWidth||vid.paused)return;
+    const c=document.getElementById('motCvs'),W=160,H=90;
+    c.width=W; c.height=H;
+    const ctx=c.getContext('2d'); ctx.drawImage(vid,0,0,W,H);
+    const frame=ctx.getImageData(0,0,W,H).data;
+    const sens=+document.getElementById('motSens').value;
+    if(motPrev){
+      let diff=0;
+      for(let i=0;i<frame.length;i+=4)
+        diff+=Math.abs(frame[i]-motPrev[i])+Math.abs(frame[i+1]-motPrev[i+1])+Math.abs(frame[i+2]-motPrev[i+2]);
+      const avg=diff/(W*H*3);
+      const on=avg>sens;
+      const dot=document.getElementById('motDot');
+      const lbl=document.getElementById('motLbl');
+      if(on){
+        dot.style.background='#3a7dff';
+        dot.style.boxShadow='0 0 10px #3a7dff';
+        lbl.textContent='Motion Detected!';
+        lbl.style.color='#3a7dff';
+        lbl.style.fontWeight='bold';
+        if(!motionCooldown){
+          motionCooldown=true;
+          toast('⚠ Motion detected!');
+          // capture thumbnail at motion moment (max 1 per 5s)
+          captureThumb(true);
+          setTimeout(()=>{ motionCooldown=false; },10000);
+        }
+        clearTimeout(motionResetTimer);
+        motionResetTimer=setTimeout(()=>{
+          dot.style.background='#ccc';
+          dot.style.boxShadow='none';
+          lbl.textContent='No Motion';
+          lbl.style.color='';
+          lbl.style.fontWeight='';
+        },1000);
+      }
+    }
+    motPrev=new Uint8ClampedArray(frame);
+  }, CFG.motionRate);
+}
+
+function setQ(q){
+  document.querySelectorAll('.q-btn').forEach(b=>b.classList.remove('q-on'));
+  document.querySelector(`.q-btn[data-q="${q}"]`).classList.add('q-on');
+  if(!player)return;
+  if(q===-1){
+    try{player.updateSettings({streaming:{abr:{autoSwitchBitrate:{video:true}}}});}catch(e){}
+  }else{
+    try{player.updateSettings({streaming:{abr:{autoSwitchBitrate:{video:false}}}});}catch(e){}
+    try{player.setQualityFor('video',q);}catch(e){}
+  }
+}
+
+function setSeg(s){
+  CFG.segDur=s;
+  document.querySelectorAll('.seg-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelector(`.seg-btn[data-s="${s}"]`).classList.add('active');
+  document.getElementById('segLbl').textContent='Segment: '+s+'s';
+  logLat('Seg: '+s+'s','—');
+}
+
+/* helpers */
+function fmtT(s){
+  if(isNaN(s)||s<0)return'0:00:00'; s=Math.floor(s);
+  return`${Math.floor(s/3600)}:${String(Math.floor(s%3600/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
+}
+function setStatus(msg,spin){
+  document.getElementById('statusOv').style.display='flex';
+  document.getElementById('statusMsg').textContent=msg;
+  document.querySelector('.spin').style.display=spin?'block':'none';
+  startNoise();
+}
+function hideStatus(){
+  document.getElementById('statusOv').style.display='none';
+  stopNoise();
+}
+function connOk(ok){
+  const el=document.getElementById('connLbl');
+  el.textContent=ok?'● Connected':'● Disconnected';
+  el.className=ok?'ok':'';
+}
+let toastT=null;
+function toast(msg){
+  const t=document.getElementById('toast'); t.textContent=msg;
+  t.classList.add('show');
+  if(toastT)clearTimeout(toastT);
+  toastT=setTimeout(()=>t.classList.remove('show'),2500);
+}
+function logLat(seg,lat){
+  latE.unshift({t:new Date().toTimeString().slice(0,8),seg,lat});
+  if(latE.length>CFG.maxLog)latE.pop();
+  document.getElementById('latLog').innerHTML=
+    latE.map(e=>`<div class="log-row"><span>${e.t} [${e.seg}]</span><span class="log-val">${e.lat}</span></div>`).join('');
+}
+
+document.addEventListener('keydown',e=>{
+  if(e.target.tagName==='INPUT')return;
+  if(e.key===' '){e.preventDefault();togglePlay();}
+  if(e.key==='l'||e.key==='L')jumpLive();
+  if(e.key==='s'||e.key==='S')takeShot();
+});
+</script>
+</body>
+</html>
