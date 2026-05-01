@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Live Stream Player</title>
+  <script src="https://cdn.dashjs.org/latest/dash.all.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, sans-serif; background: #f0f0f0; min-height: 100vh; }
+    .container { max-width: 1100px; margin: 20px auto; padding: 0 16px; display: grid; grid-template-columns: 1fr 280px; gap: 16px; }
+    .container > * { min-width: 0; }
+    
+    .video-card { background: #fff; border: 1px solid #ddd; border-radius: 4px; overflow: hidden; min-width: 0; }
+    .video-wrap { position: relative; background: #000; aspect-ratio: 16/9; }
+    #vid { width: 100%; height: 100%; display: block; object-fit: contain; }
+
+    .live-pill { position: absolute; top: 10px; left: 10px; background: #f97316; color: #fff; font-size: 11px; font-weight: bold; padding: 3px 8px; border-radius: 3px; display: flex; align-items: center; gap: 5px; z-index: 10; }
+    .live-dot { width: 6px; height: 6px; background: #fff; border-radius: 50%; animation: blink 1.2s infinite; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+    #statusOv { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 5; background: rgba(0,0,0,0.4); }
+    .status-content { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+    .spin { width: 32px; height: 32px; border: 3px solid #555; border-top-color: #3a7dff; border-radius: 50%; animation: spin .8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #statusMsg { color: #fff; font-size: 13px; }
+
+    /* RESTORED: overflow: hidden prevents the container from expanding when thumbnails overflow */
+    .controls-bar { padding: 10px 12px; border-top: 1px solid #eee; display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
+    
+    .seek-row { display: flex; align-items: center; gap: 8px; }
+    .time-lbl { font-size: 12px; color: #666; min-width: 48px; font-family: monospace; }
+    input[type=range]#seekBar { flex: 1; height: 4px; accent-color: #3a7dff; cursor: pointer; }
+    .btn-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .btn { padding: 7px 14px; border-radius: 3px; font-size: 13px; font-weight: bold; cursor: pointer; border: 1px solid transparent; }
+    .btn-blue { background: #3a7dff; color: #fff; border-color: #3a7dff; min-width: 95px; text-align: center;}
+    .btn-red { background: #f97316; color: #fff; border-color: #f97316; }
+    .btn-outline { background: #fff; color: #333; border-color: #ccc; }
+    .btn-light-blue { background: #e8f0fe; color: #3a7dff; border-color: #b8d4fe; }
+    #volSlider { width: 80px; accent-color: #3a7dff; cursor: pointer; }
+    
+    /* Thumbnails */
+    .thumb-row { display: flex; gap: 4px; overflow-x: auto; overflow-y: hidden; padding: 2px 0; max-width: 100%; scrollbar-width: thin; scrollbar-color: #ddd transparent; }
+    .thumb { flex: 0 0 auto; width: 90px; height: 56px; cursor: pointer; border: 2px solid #ddd; position: relative; }
+    .thumb img { width: 100%; height: 100%; object-fit: cover; }
+    .thumb-t { position: absolute; bottom: 0; width: 100%; background: rgba(0,0,0,0.7); color: #fff; font-size: 9px; text-align: center; }
+
+    .sidebar { display: flex; flex-direction: column; gap: 12px; }
+    .card { background: #fff; border: 1px solid #ddd; border-radius: 4px; padding: 14px; }
+    .card-title { font-size: 12px; font-weight: bold; color: #f97316; text-transform: uppercase; margin-bottom: 10px; border-bottom: 2px solid #f97316; padding-bottom: 6px; }
+    .connect-input { width: 100%; padding: 7px 9px; border: 1px solid #ccc; border-radius: 3px; font-size: 12px; margin-bottom: 8px; }
+    .connect-btn { width: 100%; padding: 9px; background: #3a7dff; color: #fff; border: none; border-radius: 3px; font-weight: bold; cursor: pointer; }
+    .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .stat { background: #f7f7f7; border: 1px solid #eee; border-radius: 3px; padding: 8px; text-align: center; }
+    .stat-val { font-size: 18px; font-weight: bold; color: #333; font-family: monospace; }
+    .stat-key { font-size: 10px; color: #888; text-transform: uppercase; margin-top: 2px; }
+    .statusbar { background: #fff; border-top: 1px solid #ddd; padding: 6px 20px; display: flex; gap: 20px; font-size: 11px; color: #888; font-family: monospace; }
+    #toast { position: fixed; top: 60px; right: 16px; background: #333; color: #fff; font-size: 12px; padding: 8px 14px; border-radius: 4px; z-index: 999; opacity: 0; transition: 0.2s; pointer-events: none; }
+    #toast.show { opacity: 1; transform: translateY(0); }
+    #ssCvs { display: none; }
+    @media (max-width: 800px) { .container { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+
+<canvas id="ssCvs"></canvas>
+<div id="toast"></div>
+
+<div class="container">
+  <div>
+    <div class="video-card">
+      <div class="video-wrap">
+        <div class="live-pill" id="livePill"><div class="live-dot"></div>LIVE</div>
+        <div id="statusOv">
+          <div class="status-content">
+            <div class="spin"></div>
+            <div id="statusMsg">Waiting for connection…</div>
+          </div>
+        </div>
+        <video id="vid" autoplay playsinline></video>
+      </div>
+
+      <div class="controls-bar">
+        <div class="seek-row">
+          <span class="time-lbl" id="curLbl">0:00:00</span>
+          <input type="range" id="seekBar" min="0" max="100" value="100" step="0.1" />
+          <span class="time-lbl" style="text-align:right" id="durLbl">LIVE</span>
+        </div>
+        
+        <div class="thumb-row" id="thumbRow"></div>
+
+        <div class="btn-row">
+          <button class="btn btn-light-blue" onclick="quickRewind(20)">◁◁ 20s</button>
+          <button class="btn btn-light-blue" onclick="quickRewind(5)">◁ 5s</button>
+          <button class="btn btn-blue" id="ppBtn" onclick="togglePlay()">⏸ Pause</button>
+          <button class="btn btn-red" onclick="jumpLive()">● Live</button>
+          <button class="btn btn-outline" onclick="takeShot()">Screenshot</button>
+          <button class="btn btn-outline" id="muteBtn" onclick="toggleMute()">🔊</button>
+          <input type="range" id="volSlider" min="0" max="100" value="100" oninput="setVolume(this.value)" />
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sidebar">
+    <div class="card">
+      <div class="card-title">Connect</div>
+      <input class="connect-input" type="text" id="mpdUrl" placeholder="http://localhost:9090/dash_output/stream.mpd" />
+      <button class="connect-btn" onclick="loadStream()">Connect</button>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Stream Stats</div>
+      <div class="stats-grid">
+        <div class="stat"><div class="stat-val" id="sBr">—</div><div class="stat-key">encoding kbps</div></div>
+        <div class="stat"><div class="stat-val" id="sDl">—</div><div class="stat-key">download kbps</div></div>
+        <div class="stat"><div class="stat-val" id="sLat">—</div><div class="stat-key">latency</div></div>
+        <div class="stat"><div class="stat-val" id="sFps">—</div><div class="stat-key">fps</div></div>
+        <div class="stat"><div class="stat-val" id="sSeg">—</div><div class="stat-key">segment size</div></div>
+        <div class="stat"><div class="stat-val" id="sDr">0</div><div class="stat-key">dropped frames</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="statusbar">
+  <span id="connLbl">● Disconnected</span>
+  <span id="latLbl">Latency: — ms</span>
+</div>
+
+<script>
+let player = null, dragging = false, statsLp = null, thumbs = [], thumbTmr = null, absStart = null;
+let lastFrameCount = 0, lastFrameTime = 0; // Reverted to your global vars
+
+function loadStream() {
+  const url = document.getElementById('mpdUrl').value.trim();
+  if (!url) { toast('Enter MPD URL'); return; }
+  setStatus('Connecting...', true);
+  if (player) player.destroy();
+  const vid = document.getElementById('vid');
+  player = dashjs.MediaPlayer().create();
+  player.initialize(vid, url, true);
+
+  player.updateSettings({
+    streaming: {
+      liveCatchup: { enabled: true },
+      abr: { autoSwitchBitrate: { video: true } }
+    }
+  });
+
+  player.on(dashjs.MediaPlayer.events.STREAM_INITIALIZED, () => {
+    hideStatus(); startStats(); startThumbs(); connOk(true);
+    fetch(url).then(r => r.text()).then(xml => {
+      const parser = new DOMParser(), doc = parser.parseFromString(xml, 'text/xml');
+      const rep = doc.querySelector('Representation');
+      if (rep) document.getElementById('sBr').textContent = Math.round(parseInt(rep.getAttribute('bandwidth'))/1000);
+      const segTpl = doc.querySelector('SegmentTemplate');
+      if (segTpl) {
+          const ts = parseInt(segTpl.getAttribute('timescale') || '1');
+          const d = parseInt(doc.querySelector('S')?.getAttribute('d') || '0');
+          if (d > 0) document.getElementById('sSeg').textContent = Math.round(d/ts) + 's';
+      }
+    });
+  });
+}
+
+function startStats() {
+  if (statsLp) clearInterval(statsLp);
+  
+  lastFrameCount = 0; 
+  lastFrameTime = performance.now();
+
+  statsLp = setInterval(() => {
+    if (!player) return;
+    const vid = document.getElementById('vid');
+    if (!vid.seekable || !vid.seekable.length) return;
+
+    const s = vid.seekable.start(0);
+    const e = vid.seekable.end(vid.seekable.length - 1);
+    if (absStart === null) absStart = s;
+
+    // 1. UI & Seekbar Updates
+    if (!dragging) {
+      const range = e - s;
+      sb.value = range > 0 ? Math.max(0, Math.min(100, ((vid.currentTime - s) / range) * 100)) : 100;
+      
+      const isLive = (e - vid.currentTime) < 10;
+      document.getElementById('curLbl').textContent = fmtT(vid.currentTime - absStart);
+      document.getElementById('durLbl').textContent = isLive ? 'LIVE' : '-' + fmtT(e - vid.currentTime);
+      document.getElementById('livePill').style.opacity = isLive ? '1' : '0.4';
+    }
+
+    // 2. Network Stats
+    const tp = Math.round(player.getAverageThroughput('video'));
+
+    // If it's fast
+    if (tp > 25000 || tp === 0) {
+        document.getElementById('sDl').textContent = vid.currentTime > 0 ? "Local" : "—";
+    } else {
+        document.getElementById('sDl').textContent = tp || "—";
+    }
+    
+    const lat = player.getCurrentLiveLatency();
+    if (lat) document.getElementById('sLat').textContent = lat.toFixed(1) + 's';
+
+    // 3. FPS & Dropped Frames
+    if (vid.getVideoPlaybackQuality) {
+      const q = vid.getVideoPlaybackQuality();
+      document.getElementById('sDr').textContent = q.droppedVideoFrames || 0;
+      
+      const now = performance.now();
+      const dt = (now - lastFrameTime) / 1000;
+      
+      if (dt >= 1.0) {
+        const fps = Math.max(0, Math.round((q.totalVideoFrames - lastFrameCount) / dt));
+        
+        document.getElementById('sFps').textContent = fps;
+        
+        lastFrameCount = q.totalVideoFrames;
+        lastFrameTime = now;
+      }
+    }
+  }, 500);
+}
+
+const sb = document.getElementById('seekBar');
+sb.onmousedown = () => { dragging = true; };
+sb.oninput = () => { dragging = true; }; 
+sb.onchange = () => {
+    dragging = false;
+    if(!player) return;
+    const vid = document.getElementById('vid');
+    if (!vid.seekable.length) return;
+    const s = vid.seekable.start(0), e = vid.seekable.end(vid.seekable.length - 1);
+    const target = s + (parseFloat(sb.value) / 100) * (e - s);
+    player.updateSettings({ streaming: { liveCatchup: { enabled: false } } });
+    vid.currentTime = target;
+};
+
+function startThumbs() {
+  if (thumbTmr) clearInterval(thumbTmr);
+  thumbTmr = setInterval(() => {
+    const vid = document.getElementById('vid');
+    if (vid.paused || !vid.videoWidth) return;
+    const c = document.createElement('canvas'); c.width = 160; c.height = 90;
+    c.getContext('2d').drawImage(vid, 0, 0, 160, 90);
+    thumbs.push({ time: vid.currentTime, src: c.toDataURL('image/jpeg', 0.5) });
+    if (thumbs.length > 30) thumbs.shift();
+    renderThumbs();
+  }, 20000);
+}
+
+function renderThumbs() {
+  const row = document.getElementById('thumbRow'); row.innerHTML = '';
+  thumbs.forEach(t => {
+    const d = document.createElement('div'); d.className = 'thumb';
+    d.onclick = () => { document.getElementById('vid').currentTime = t.time; };
+    d.innerHTML = `<img src="${t.src}"><div class="thumb-t">${fmtT(t.time - absStart)}</div>`;
+    row.appendChild(d);
+  });
+  row.scrollLeft = row.scrollWidth;
+}
+
+function jumpLive() {
+    if (!player) return;
+    const vid = document.getElementById('vid');
+
+    if (vid.seekable.length > 0) {
+        // Find the absolute newest frame, then subtract the dynamically calculated safe delay
+        vid.currentTime = vid.seekable.end(vid.seekable.length - 1) - player.getTargetLiveDelay();
+    }
+    vid.play();
+}
+
+function quickRewind(s) { 
+  const vid = document.getElementById('vid'); 
+  player.updateSettings({streaming:{liveCatchup:{enabled:false}}}); 
+  vid.currentTime = Math.max(vid.seekable.start(0), vid.currentTime - s); 
+}
+
+function togglePlay() { 
+  const v = document.getElementById('vid'); 
+  const btn = document.getElementById('ppBtn');
+    
+   if (v.paused) {
+      v.play();
+      btn.textContent = '⏸ Pause';
+  } else {
+      v.pause();
+      btn.textContent = '▶ Play';
+  }
+}
+
+function takeShot() {
+  const vid = document.getElementById('vid'), c = document.getElementById('ssCvs'), ctx = c.getContext('2d');
+  c.width = vid.videoWidth; c.height = vid.videoHeight;
+  ctx.drawImage(vid, 0, 0);
+  const link = document.createElement('a'); link.download = `shot_${Date.now()}.jpg`; 
+  link.href = c.toDataURL('image/jpeg', 0.9); link.click();
+}
+
+function setVolume(v) { document.getElementById('vid').volume = v/100; }
+
+function toggleMute() {
+  const v = document.getElementById('vid'); 
+  v.muted = !v.muted; document.getElementById('muteBtn').textContent = v.muted ? '🔇' : '🔊';
+}
+
+function fmtT(s) { 
+  if (isNaN(s) || s < 0) return "0:00"; 
+  const m = Math.floor(s/60), sec = Math.floor(s%60); 
+  return `${m}:${sec.toString().padStart(2,'0')}`; 
+}
+
+function setStatus(m, s) { 
+  document.getElementById('statusOv').style.display = 'flex'; 
+  document.getElementById('statusMsg').textContent = m; 
+  document.querySelector('.spin').style.display = s ? 'block' : 'none'; 
+}
+
+function hideStatus() { document.getElementById('statusOv').style.display = 'none'; }
+
+function connOk(ok) { 
+  const l = document.getElementById('connLbl'); 
+  l.textContent = ok ? '● Connected' : '● Disconnected'; 
+}
+
+function toast(m) { 
+  const t = document.getElementById('toast'); 
+  t.textContent = m; t.classList.add('show'); 
+  setTimeout(() => t.classList.remove('show'), 2000); 
+}
+
+</script>
+</body>
+</html>

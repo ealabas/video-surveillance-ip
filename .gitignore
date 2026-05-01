@@ -4,4 +4,5 @@ server/dash_output/*
 *.mpd
 
 server/nginx/logs/*
+!server/nginx/logs/.gitkeep
 server/nginx/temp/*
